@@ -69,6 +69,16 @@ async def fix_pr_from_webhook(pr_details):
     head_sha = pr_data['head']['sha']
     head_branch = pr_data['head']['ref']
 
+    # Check if the current head commit was already auto-fixed to prevent infinite loop
+    commit_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{head_sha}"
+    headers = {"Authorization": f"token {token}"}
+    response = requests.get(commit_url, headers=headers)
+    response.raise_for_status()
+    current_commit = response.json()
+    if current_commit['commit']['message'] == "Fix build errors automatically":
+        print("⏭️ Skipping auto-fix: PR head commit was already auto-fixed")
+        return {"message": "PR already auto-fixed, skipping"}
+
     files = get_pr_files(owner, repo, pr_number, token)
 
     file_updates = {}
