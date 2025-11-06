@@ -57,6 +57,42 @@ async def github_webhook(request: Request, x_github_event: str = Header(None)):
 
     return {"message": "Webhook received"}
 
+async def fix_pr_from_webhook(pr_details):
+    pr_url = pr_details['pr_url']
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        raise Exception("GitHub token not configured")
+
+    owner, repo, pr_number = parse_pr_url(pr_url)
+
+    pr_data = get_pr_details(owner, repo, pr_number, token)
+    head_sha = pr_data['head']['sha']
+    head_branch = pr_data['head']['ref']
+
+    files = get_pr_files(owner, repo, pr_number, token)
+
+    file_updates = {}
+    for file in files:
+        if file['status'] in ['modified', 'added']:
+            filename = file['filename']
+            try:
+                content = get_file_content(owner, repo, filename, head_sha, token)
+                fixed_content = fix_code_with_ai(content, filename)
+                file_updates[filename] = fixed_content
+            except Exception as e:
+                logger.error(f"Error processing {filename}: {str(e)}")
+                continue
+
+    if not file_updates:
+        return {"message": "No files were updated"}
+
+    clone_and_update_repo(owner, repo, head_branch, token, file_updates)
+
+    return {
+        "message": "PR updated successfully",
+        "updated_files": list(file_updates.keys())
+    }
+
 def parse_pr_url(pr_url):
     """Parse GitHub PR URL to extract owner, repo, and PR number."""
     match = re.match(r'https://github\.com/([^/]+)/([^/]+)/pull/(\d+)', pr_url)
