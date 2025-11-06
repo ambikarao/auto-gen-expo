@@ -1,3 +1,6 @@
 fastapi
 uvicorn
 requests
+openai
+gitpython
+python-dotenv
